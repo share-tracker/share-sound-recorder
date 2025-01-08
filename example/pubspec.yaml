@@ -31,7 +31,6 @@ dependencies:
   flutter:
     sdk: flutter
 
-  audioplayers: ^6.1.0
   cupertino_icons: ^1.0.6
   flutter_logger_plus: ^5.0.0
   flutter_sound: ^9.17.8

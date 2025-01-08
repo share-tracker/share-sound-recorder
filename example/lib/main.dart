@@ -1,7 +1,8 @@
-import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_logger_plus/flutter_logger_plus.dart';
-import 'package:flutter_sound/flutter_sound.dart' as sound;
+import 'package:flutter_sound/flutter_sound.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:permission_handler/permission_handler.dart';
 
 void main() {
   runApp(const MaterialApp(home: Audio()));
@@ -18,10 +19,16 @@ class _AudioState extends State<Audio> {
   @override
   void initState() {
     super.initState();
+
+    _initializeRecorder();
+    _initializePlayer();
   }
 
   @override
   void dispose() {
+    _player.closePlayer();
+    _recorder.closeRecorder();
+
     super.dispose();
   }
 
@@ -68,7 +75,7 @@ class _AudioState extends State<Audio> {
                       setState(() {
                         position = Duration(seconds: value.toInt());
                       });
-                      await audioPlayer.seek(position);
+                      await _player.seekToPlayer(position);
                     },
                     activeColor: Colors.black,
                   ),
@@ -89,25 +96,16 @@ class _AudioState extends State<Audio> {
                         child: IconButton(
                           padding: const EdgeInsets.only(bottom: 50),
                           icon: Icon(
-                            isPlaying ? Icons.pause : Icons.play_arrow,
+                            _player.isPlaying ? Icons.pause : Icons.play_arrow,
                             color: Colors.brown,
                           ),
                           iconSize: 25,
                           onPressed: () async {
-                            logger.info("isplaying 전 : $isPlaying");
-
-                            if (isPlaying) {
-                              //재생중이면
-                              await audioPlayer.pause(); //멈춤고
-                              setState(() {
-                                isPlaying = false; //상태변경하기..?
-                              });
+                            if (_player.isPlaying) {
+                              _stopAudio();
                             } else {
-                              //멈춘 상태였으면
-                              //  await playAudio();
-                              await audioPlayer.resume(); // 녹음된 오디오 재생
+                              _playAudio();
                             }
-                            logger.info("isplaying 후 : $isPlaying");
                           },
                         ),
                       ),
@@ -127,16 +125,15 @@ class _AudioState extends State<Audio> {
           ),
           SizedBox(
             child: IconButton(
-              onPressed: () async {
-                if (recorder.isRecording) {
-                  // await stop();
+              onPressed: () {
+                if (_recorder.isRecording) {
+                  _stopRecording();
                 } else {
-                  // await record();
+                  _startRecording();
                 }
-                setState(() {});
               },
               icon: Icon(
-                recorder.isRecording ? Icons.stop : Icons.mic,
+                _recorder.isRecording ? Icons.stop : Icons.mic,
                 size: 30,
                 color: Colors.black,
               ),
@@ -147,15 +144,58 @@ class _AudioState extends State<Audio> {
     );
   }
 
-  bool isPlaying = false;
-  bool isRecording = false;
+  Future<void> _startRecording() async {
+    await _recorder.startRecorder(toFile: 'audio.aac');
+    setState(() {});
+  }
 
-  String audioPath = '';
-  String playAudioPath = '';
+  Future<void> _stopRecording() async {
+    final url = await _recorder.stopRecorder();
+
+    logger.cyan(url);
+
+    setState(() {});
+  }
+
+  Future<void> _playAudio() async {
+    if (!_player.isPlaying) {
+      final directory = await getTemporaryDirectory();
+
+      final path = '${directory.path}/audio.aac';
+
+      logger.cyan(path);
+
+      await _player.startPlayer(
+        fromURI: path,
+        codec: Codec.defaultCodec,
+      );
+      setState(() {});
+    }
+  }
+
+  Future<void> _stopAudio() async {
+    if (_player.isPlaying) {
+      await _player.stopPlayer();
+      setState(() {});
+    }
+  }
+
+  Future<void> _initializeRecorder() async {
+    await Permission.microphone.request();
+    if (await Permission.microphone.isGranted) {
+      await _recorder.openRecorder();
+    } else {
+      throw "마이크 권한이 필요합니다.";
+    }
+  }
+
+  Future<void> _initializePlayer() async {
+    await _player.openPlayer();
+  }
 
   Duration duration = Duration.zero;
   Duration position = Duration.zero;
 
-  final audioPlayer = AudioPlayer();
-  final recorder = sound.FlutterSoundRecorder();
+  final _recorder = FlutterSoundRecorder();
+  final _player = FlutterSoundPlayer();
 }
